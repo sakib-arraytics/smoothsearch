@@ -1,0 +1,16 @@
+{
+  "name": "smooth-search-wasm",
+  "type": "module",
+  "collaborators": [
+    "Smooth Plugins <support@smoothplugins.com>"
+  ],
+  "version": "1.0.0",
+  "files": [
+    "smooth_search_wasm_bg.wasm",
+    "smooth_search_wasm.js"
+  ],
+  "main": "smooth_search_wasm.js",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

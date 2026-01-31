@@ -1,0 +1,19 @@
+{
+    "name": "smooth-search",
+    "version": "1.0.0",
+    "description": "Smooth Search Plugin Build Scripts",
+    "scripts": {
+        "smooth-build": "./scripts/build.sh",
+        "test": "vitest",
+        "smooth-refresh-build": "./scripts/refresh.sh"
+    },
+    "devDependencies": {
+        "@testing-library/dom": "^10.4.1",
+        "@testing-library/user-event": "^14.6.1",
+        "bestzip": "^2.2.1",
+        "esbuild": "^0.27.2",
+        "jsdom": "^27.4.0",
+        "vitest": "^4.0.17",
+        "wp-pot-cli": "^1.5.0"
+    }
+}

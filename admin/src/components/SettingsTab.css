@@ -1,0 +1,119 @@
+.settings-tab {
+    max-width: 1000px;
+}
+
+.settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 32px;
+    gap: 24px;
+}
+
+.settings-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--smooth-text);
+    margin-bottom: 4px;
+}
+
+.settings-subtitle {
+    font-size: 14px;
+    color: var(--smooth-text-secondary);
+}
+
+.settings-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.settings-grid {
+    display: grid;
+    gap: 24px;
+}
+
+.settings-section-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--smooth-text);
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--smooth-border);
+}
+
+.settings-field {
+    margin-bottom: 24px;
+}
+
+.settings-field:last-child {
+    margin-bottom: 0;
+}
+
+/* Custom Toggle Switch */
+.settings-toggle {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.settings-toggle input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.settings-toggle-slider {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    background: var(--smooth-border);
+    border-radius: var(--smooth-radius-full);
+    transition: all 0.3s ease;
+    flex-shrink: 0;
+}
+
+.settings-toggle-slider::before {
+    content: '';
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    left: 3px;
+    top: 3px;
+    background: white;
+    border-radius: 50%;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.settings-toggle input:checked+.settings-toggle-slider {
+    background: var(--smooth-primary);
+}
+
+.settings-toggle input:checked+.settings-toggle-slider::before {
+    transform: translateX(20px);
+}
+
+.settings-toggle-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--smooth-text);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .settings-header {
+        flex-direction: column;
+    }
+
+    .settings-actions {
+        width: 100%;
+        flex-direction: column;
+    }
+
+    .settings-actions button {
+        width: 100%;
+    }
+}

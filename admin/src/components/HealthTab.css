@@ -1,0 +1,236 @@
+.health-tab {
+    max-width: 1200px;
+}
+
+.health-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 32px;
+    gap: 24px;
+}
+
+.health-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--smooth-text);
+    margin-bottom: 4px;
+}
+
+.health-subtitle {
+    font-size: 14px;
+    color: var(--smooth-text-secondary);
+}
+
+.health-section-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--smooth-text);
+    margin-bottom: 20px;
+}
+
+/* Status Cards Grid */
+.health-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+    margin-bottom: 24px;
+}
+
+.health-card {
+    background: var(--smooth-surface);
+    border: 1px solid var(--smooth-border);
+    border-radius: var(--smooth-radius-lg);
+    padding: 20px;
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    transition: all 0.2s ease;
+}
+
+.health-card:hover {
+    box-shadow: var(--smooth-shadow-md);
+    transform: translateY(-2px);
+}
+
+.health-card-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: var(--smooth-radius);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.health-card-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.health-card-label {
+    font-size: 13px;
+    color: var(--smooth-text-muted);
+    margin-bottom: 4px;
+    font-weight: 500;
+}
+
+.health-card-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--smooth-text);
+    line-height: 1.2;
+}
+
+.health-card-value-small {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--smooth-text);
+    line-height: 1.3;
+}
+
+/* Rebuild Progress */
+.rebuild-progress {
+    margin-bottom: 24px;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background: var(--smooth-border);
+    border-radius: var(--smooth-radius-full);
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--smooth-primary), var(--smooth-accent));
+    border-radius: var(--smooth-radius-full);
+    transition: width 0.3s ease;
+}
+
+/* Performance Metrics */
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+}
+
+.metric-item {
+    padding: 16px;
+    background: var(--smooth-bg);
+    border-radius: var(--smooth-radius);
+    border: 1px solid var(--smooth-border);
+}
+
+.metric-label {
+    font-size: 13px;
+    color: var(--smooth-text-muted);
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
+.metric-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--smooth-text);
+    margin-bottom: 8px;
+}
+
+.metric-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: var(--smooth-radius-full);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.metric-badge-success {
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--smooth-success);
+}
+
+.metric-badge-warning {
+    background: rgba(245, 158, 11, 0.1);
+    color: var(--smooth-warning);
+}
+
+/* Queue List */
+.queue-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.queue-item {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding: 12px;
+    background: var(--smooth-bg);
+    border-radius: var(--smooth-radius);
+    border: 1px solid var(--smooth-border);
+}
+
+.queue-status {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.queue-status-completed {
+    background: var(--smooth-success);
+}
+
+.queue-status-pending {
+    background: var(--smooth-warning);
+}
+
+.queue-content {
+    flex: 1;
+}
+
+.queue-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--smooth-text);
+    margin-bottom: 2px;
+}
+
+.queue-time {
+    font-size: 12px;
+    color: var(--smooth-text-muted);
+}
+
+/* Spinning Animation */
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.spinning {
+    animation: spin 1s linear infinite;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .health-header {
+        flex-direction: column;
+    }
+
+    .health-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .metrics-grid {
+        grid-template-columns: 1fr;
+    }
+}

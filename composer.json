@@ -1,0 +1,28 @@
+{
+    "name": "smooth-plugins/smooth-search",
+    "description": "Ultra-high-performance WooCommerce search with Rust/Wasm fuzzy matching engine",
+    "type": "wordpress-plugin",
+    "license": "GPL-3.0-or-later",
+    "authors": [
+        {
+            "name": "Smooth Plugins",
+            "email": "support@smoothplugins.com"
+        }
+    ],
+    "require": {
+        "php": ">=8.2"
+    },
+    "require-dev": {
+        "mockery/mockery": "^1.6",
+        "phpunit/phpunit": "^10.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "SmoothSearch\\": "includes/"
+        }
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "sort-packages": true
+    }
+}

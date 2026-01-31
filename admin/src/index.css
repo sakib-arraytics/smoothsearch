@@ -1,0 +1,192 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  /* Brand Colors - Smooth Plugins */
+  --smooth-primary: #6366f1;
+  --smooth-primary-dark: #4f46e5;
+  --smooth-primary-light: #818cf8;
+  --smooth-accent: #8b5cf6;
+  --smooth-success: #10b981;
+  --smooth-warning: #f59e0b;
+  --smooth-error: #ef4444;
+
+  /* Neutrals */
+  --smooth-bg: #f9fafb;
+  --smooth-surface: #ffffff;
+  --smooth-border: #e5e7eb;
+  --smooth-text: #111827;
+  --smooth-text-secondary: #6b7280;
+  --smooth-text-muted: #9ca3af;
+
+  /* Shadows */
+  --smooth-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --smooth-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --smooth-shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --smooth-shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+
+  /* Spacing */
+  --smooth-radius: 8px;
+  --smooth-radius-lg: 12px;
+  --smooth-radius-full: 9999px;
+}
+
+[data-theme='dark'] {
+  /* Brand Colors - Dark Mode Adjustments */
+  --smooth-primary: #818cf8;
+  /* Lighter for dark bg */
+  --smooth-primary-dark: #6366f1;
+  --smooth-primary-light: #a5b4fc;
+
+  /* Neutrals - Dark Mode */
+  --smooth-bg: #111827;
+  /* Very dark grey/black */
+  --smooth-surface: #1f2937;
+  /* Slightly lighter for cards */
+  --smooth-border: #374151;
+  /* Dark grey border */
+  --smooth-text: #f9fafb;
+  /* Almost white text */
+  --smooth-text-secondary: #d1d5db;
+  /* Light grey text */
+  --smooth-text-muted: #9ca3af;
+  /* Muted text stays similar */
+
+  /* Shadows - Adjusted for visibility on dark */
+  --smooth-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --smooth-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 1px 2px -1px rgb(0 0 0 / 0.3);
+  --smooth-shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.4);
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--smooth-bg);
+  color: var(--smooth-text);
+}
+
+/* Remove WordPress admin styles when in full-page mode */
+#smooth-search-admin-root {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--smooth-bg);
+  z-index: 99999;
+  overflow: auto;
+}
+
+/* Utility Classes */
+.smooth-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.smooth-card {
+  background: var(--smooth-surface);
+  border: 1px solid var(--smooth-border);
+  border-radius: var(--smooth-radius-lg);
+  box-shadow: var(--smooth-shadow);
+  padding: 24px;
+}
+
+.smooth-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: var(--smooth-radius);
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.smooth-btn-primary {
+  background: var(--smooth-primary);
+  color: white;
+}
+
+.smooth-btn-primary:hover {
+  background: var(--smooth-primary-dark);
+  transform: translateY(-1px);
+  box-shadow: var(--smooth-shadow-md);
+}
+
+.smooth-btn-secondary {
+  background: var(--smooth-surface);
+  color: var(--smooth-text);
+  border: 1px solid var(--smooth-border);
+}
+
+.smooth-btn-secondary:hover {
+  background: var(--smooth-bg);
+  border-color: var(--smooth-primary);
+}
+
+/* Strongly override WordPress Admin Defaults for inputs in our app */
+.smooth-admin input[type=text],
+.smooth-admin input[type=number],
+.smooth-admin input[type=search],
+.smooth-admin input[type=email],
+.smooth-admin select,
+.smooth-admin textarea,
+.smooth-input {
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 14px;
+  background-color: var(--smooth-bg) !important;
+  color: var(--smooth-text) !important;
+  border: 1px solid var(--smooth-border) !important;
+  border-radius: var(--smooth-radius) !important;
+  box-shadow: none !important;
+  transition: all 0.2s ease;
+}
+
+.smooth-input:focus {
+  outline: none;
+  border-color: var(--smooth-primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  background-color: var(--smooth-bg);
+  /* Keep background consistent on focus */
+}
+
+.smooth-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 6px;
+  color: var(--smooth-text);
+}
+
+.smooth-text-muted {
+  color: var(--smooth-text-muted);
+  font-size: 13px;
+}
+
+/* Animations */
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.smooth-animate-in {
+  animation: slideInUp 0.3s ease;
+}

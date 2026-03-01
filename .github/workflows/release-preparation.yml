@@ -701,11 +701,18 @@ jobs:
           print(json.dumps(ai, indent=2, ensure_ascii=False)[:3000])
           print('=== END AI OUTPUT ===')
 
-          with open('feedback-intelligence.json') as f:
-              fb = json.load(f)
+          try:
+              with open('feedback-intelligence.json') as f:
+                  fb = json.load(f)
+          except FileNotFoundError:
+              fb = {'diff_report': {'addressed': [], 'pending': [], 'sentiment_summary': {'overall': 'n/a'}, 'stats': {}}}
 
-          # build-analysis is temporarily disabled; use a stub
-          build_summary = {'total_size_mb': 0, 'zip_size_mb': 0, 'status': 'skipped'}
+          try:
+              with open('build-report.json') as f:
+                  build = json.load(f)
+              build_summary = build.get('summary', {})
+          except FileNotFoundError:
+              build_summary = {'total_size_mb': 0, 'zip_size_mb': 0, 'status': 'skipped'}
 
           version = ai.get('version', '?.?.?')
           entries = ai.get('changelog_entries', [])
@@ -732,12 +739,12 @@ jobs:
           for e in entries:
               t = (e.get('type', '') or '').strip().lower()
               if t in ('new', 'feature'):
-                  prefix = 'New'
+                  prefix = '✨'
               elif t in ('fix', 'bug fix'):
-                  prefix = 'Fix'
+                  prefix = '🔧'
               else:
-                  prefix = 'Tweak'
-              changelog_lines.append(f'[{prefix}] {e.get(\"entry\", \"\")}')
+                  prefix = '⚡'
+              changelog_lines.append(f'{prefix} [{e.get("type", "Other")}] {e.get("entry", "")}')
           changelog_text = chr(10).join(changelog_lines)[:2000] if changelog_lines else 'No changelog entries generated'
 
           def text(content, bold=False):
@@ -777,27 +784,27 @@ jobs:
                   }
               }
 
+          release_type = '${{ needs.prepare.outputs.release_type }}'
           blocks = []
 
-          build_info = f'Plugin Build: {build_summary.get(\"total_size_mb\", 0)} MB | ZIP: {build_summary.get(\"zip_size_mb\", 0)} MB | Status: {build_summary.get(\"status\", \"PASSED\")}'
           blocks.append(callout(
-              f'Release v{version} | {datetime.utcnow().strftime(\"%B %d, %Y\")} | {build_info}',
+              f'Release v{version} | {datetime.utcnow().strftime("%B %d, %Y")} | Build: {build_summary.get("status", "PASSED")} | {build_summary.get("total_size_mb", 0)} MB',
               '🚀'
           ))
           blocks.append(divider())
 
-          blocks.append(h('Changelog', 1))
-          for t, icon in [('New', 'New'), ('Fix', 'Fix'), ('Tweak', 'Tweak')]:
+          blocks.append(h('📋 Changelog', 1))
+          for t, icon in [('New', '✨'), ('Fix', '🔧'), ('Tweak', '⚡')]:
               typed = [e for e in entries if e.get('type') == t]
               if typed:
-                  blocks.append(text(f'[{t}]', bold=True))
+                  blocks.append(text(f'{icon} {t}', bold=True))
                   for e in typed:
                       blocks.append(bullet(e.get('entry', '')))
           blocks.append(divider())
 
           summary = to_str(ai.get('executive_summary', ''))
           if summary:
-              blocks.append(h('Executive Summary', 1))
+              blocks.append(h('📊 Executive Summary', 1))
               for para in summary.split('\n\n'):
                   if para.strip():
                       blocks.append(text(para.strip()))
@@ -805,7 +812,7 @@ jobs:
 
           blog = to_str(ai.get('marketing_blog_draft', ''))
           if blog:
-              blocks.append(h('Blog Post Draft', 1))
+              blocks.append(h('📝 Blog Post Draft', 1))
               blocks.append(callout('Draft - edit before publishing', '✏️'))
               for para in blog.split('\n\n'):
                   if para.strip():
@@ -814,13 +821,13 @@ jobs:
 
           linkedin = to_str(ai.get('linkedin_post_draft', ''))
           if linkedin:
-              blocks.append(h('LinkedIn Post Draft', 1))
+              blocks.append(h('💼 LinkedIn Post Draft', 1))
               blocks.append(code_block(linkedin))
               blocks.append(divider())
 
           reddit = to_str(ai.get('reddit_post_draft', ''))
           if reddit:
-              blocks.append(h('Reddit Post Draft', 1))
+              blocks.append(h('🟠 Reddit Post Draft', 1))
               blocks.append(code_block(reddit))
               blocks.append(divider())
 
@@ -832,7 +839,7 @@ jobs:
           else:
               email = str(email_raw) if email_raw else ''
           if email:
-              blocks.append(h('Email Draft', 1))
+              blocks.append(h('📧 Email Draft', 1))
               for para in email.split('\n\n'):
                   if para.strip():
                       blocks.append(text(para.strip()))
@@ -842,31 +849,33 @@ jobs:
           pending = diff.get('pending', [])
           sentiment = diff.get('sentiment_summary', {})
 
-          blocks.append(h('Feedback Intelligence', 1))
+          blocks.append(h('👥 Feedback Intelligence', 1))
           blocks.append(text(f'Overall sentiment: {sentiment.get(\"overall\", \"N/A\")}'))
 
           if addressed:
-              blocks.append(h('Issues Addressed', 2))
+              blocks.append(h('✅ Issues Addressed', 2))
               for item in addressed:
                   blocks.append(bullet(f'{item.get(\"feedback_summary\",\"\")} → {item.get(\"addressed_by\",\"\")}'))
 
           if pending:
-              blocks.append(h('Pending Issues', 2))
+              blocks.append(h('⏳ Pending Issues', 2))
               for item in pending:
-                  sev = {'HIGH':'[HIGH]','MEDIUM':'[MED]','LOW':'[LOW]'}.get(item.get('severity',''), '[-]')
+                  sev = {'HIGH': '🔴', 'MEDIUM': '🟡', 'LOW': '🟢'}.get(item.get('severity', ''), '⚪')
                   blocks.append(bullet(f'{sev} {item.get(\"feedback_summary\",\"\")} — {item.get(\"recommended_priority\",\"\")}'))
 
           blocks.append(divider())
           blocks.append(text(f'Generated by Release Intelligence System on {datetime.utcnow().strftime(\"%Y-%m-%d %H:%M\")} UTC'))
 
-          release_type = '${{ needs.prepare.outputs.release_type }}'
           summary_text = to_str(ai.get('executive_summary', ''))[:2000]
           if not summary_text:
               highlights = ai.get('release_highlights', [])
               if highlights:
-                  summary_text = chr(10).join([f'- {h}' for h in highlights])[:2000]
+                  summary_text = chr(10).join([f'• {h}' for h in highlights])[:2000]
               else:
                   summary_text = 'No summary generated'
+
+          print(f'Summary text length: {len(summary_text)}')
+          print(f'Changelog text length: {len(changelog_text)}')
 
           payload = {
               'parent': {'database_id': db_id},
@@ -877,7 +886,7 @@ jobs:
                   'Release Type': {'select': {'name': release_type}},
                   'Status': {'select': {'name': 'Draft'}},
                   'Date': {'date': {'start': datetime.utcnow().strftime('%Y-%m-%d')}},
-                  'Build Size': {'rich_text': [{'type': 'text', 'text': {'content': f'{build_summary.get(\"total_size_mb\", 0)} MB'}}]},
+                  'Build Size': {'rich_text': [{'type': 'text', 'text': {'content': f'{build_summary.get("total_size_mb", 0)} MB'}}]},
                   'New Features': {'number': new_count},
                   'Bug Fixes': {'number': fix_count},
                   'Tweaks': {'number': tweak_count},
@@ -900,10 +909,12 @@ jobs:
               page_id = resp.json()['id']
               for chunk_start in range(100, len(blocks), 100):
                   chunk = blocks[chunk_start:chunk_start+100]
-                  requests.patch(
+                  r = requests.patch(
                       f'https://api.notion.com/v1/blocks/{page_id}/children',
                       headers=headers,
                       json={'children': chunk}
                   )
+                  if r.status_code not in (200, 201):
+                      print(f'Warning: block chunk append failed: {r.status_code} {r.text[:200]}')
           print('Done!')
           "

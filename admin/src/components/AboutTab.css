@@ -1,0 +1,242 @@
+.about-tab {
+    max-width: 1200px;
+}
+
+.about-header {
+    margin-bottom: 32px;
+}
+
+.about-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--smooth-text);
+    margin-bottom: 4px;
+}
+
+.about-subtitle {
+    font-size: 14px;
+    color: var(--smooth-text-secondary);
+}
+
+.about-grid {
+    display: grid;
+    gap: 24px;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+/* Hero Card */
+.about-hero-card {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 48px 40px;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%) !important;
+    color: white;
+    border: none;
+}
+
+.about-hero-icon-wrapper {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 80px;
+    height: 80px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    margin-bottom: 20px;
+}
+
+.about-hero-icon {
+    color: white;
+}
+
+.about-hero-title {
+    font-size: 32px;
+    font-weight: 800;
+    color: white !important;
+    margin-bottom: 12px;
+}
+
+.about-hero-tagline {
+    font-size: 16px;
+    color: rgba(255, 255, 255, 0.9) !important;
+    max-width: 480px;
+    margin: 0 auto 28px;
+    line-height: 1.6;
+}
+
+.about-hero-btn {
+    display: inline-block;
+    padding: 12px 28px;
+    background: white;
+    color: #6366f1;
+    border-radius: var(--smooth-radius);
+    font-size: 15px;
+    font-weight: 700;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.about-hero-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+    color: #6366f1;
+}
+
+/* Content Cards (Mission & Vision) */
+.about-content-card {
+    display: flex;
+    flex-direction: column;
+}
+
+.about-card-icon {
+    font-size: 36px;
+    margin-bottom: 12px;
+}
+
+.about-section-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--smooth-text);
+    margin-bottom: 10px;
+}
+
+.about-section-text {
+    font-size: 14px;
+    color: var(--smooth-text-secondary);
+    line-height: 1.7;
+    margin: 0;
+}
+
+/* Core Values */
+.about-values-section {
+    grid-column: 1 / -1;
+}
+
+.about-values-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+}
+
+.about-value-item {
+    background: var(--smooth-bg);
+    border-radius: var(--smooth-radius);
+    padding: 20px;
+    text-align: center;
+}
+
+.about-value-icon {
+    font-size: 32px;
+    margin-bottom: 10px;
+}
+
+.about-value-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--smooth-text);
+    margin-bottom: 6px;
+}
+
+.about-value-desc {
+    font-size: 13px;
+    color: var(--smooth-text-secondary);
+    line-height: 1.5;
+    margin: 0;
+}
+
+/* Stats */
+.about-stats-section {
+    grid-column: 1 / -1;
+}
+
+.about-stats-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+}
+
+.about-stat-box {
+    background: var(--smooth-bg);
+    border-radius: var(--smooth-radius);
+    padding: 24px 16px;
+    text-align: center;
+}
+
+.about-stat-value {
+    font-size: 32px;
+    font-weight: 800;
+    color: var(--smooth-primary);
+    margin-bottom: 6px;
+    line-height: 1;
+}
+
+.about-stat-label {
+    font-size: 13px;
+    color: var(--smooth-text-secondary);
+    line-height: 1.4;
+}
+
+/* Builder Card */
+.about-builder-card {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: flex-start;
+    gap: 24px;
+}
+
+.about-builder-avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    color: white;
+    font-size: 20px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.about-builder-info {
+    flex: 1;
+}
+
+.about-builder-link {
+    display: inline-block;
+    margin-top: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--smooth-primary);
+    text-decoration: none;
+    transition: opacity 0.2s ease;
+}
+
+.about-builder-link:hover {
+    opacity: 0.8;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .about-hero-card {
+        padding: 32px 20px;
+    }
+
+    .about-hero-title {
+        font-size: 24px;
+    }
+
+    .about-stats-row {
+        grid-template-columns: 1fr;
+    }
+
+    .about-builder-card {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+
+    .about-values-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Settings, Palette, Activity, Search, Code, Moon, Sun } from 'lucide-react';
+import { ArrowLeft, Settings, Palette, Activity, Search, Code, Moon, Sun, Info } from 'lucide-react';
 import SettingsTab from './components/SettingsTab';
 import StylerTab from './components/StylerTab';
 import HealthTab from './components/HealthTab';
 import ShortcodeTab from './components/ShortcodeTab';
+import AboutTab from './components/AboutTab';
 import './AdminApp.css';
 
 const AdminApp = () => {
@@ -31,6 +32,7 @@ const AdminApp = () => {
         { id: 'styler', label: 'Live Styler', icon: Palette },
         { id: 'shortcode', label: 'Shortcode', icon: Code },
         { id: 'health', label: 'Health Monitor', icon: Activity },
+        { id: 'about', label: 'About', icon: Info },
     ];
 
     const renderTabContent = () => {
@@ -43,6 +45,8 @@ const AdminApp = () => {
                 return <ShortcodeTab />;
             case 'health':
                 return <HealthTab />;
+            case 'about':
+                return <AboutTab />;
             default:
                 return <SettingsTab />;
         }

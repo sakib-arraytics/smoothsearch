@@ -83,19 +83,28 @@ composer install
 2. Find **Smooth Search** and click **Activate**
 3. WooCommerce must also be active — the plugin will show an admin notice if it is missing
 
-### Step 4 — Start the Admin UI dev server
+### Step 4 — Build the Admin UI
 
-The admin panel (React/Vite) is embedded inside WordPress. To get hot module reload while developing it:
+The admin panel (React/Vite) must be built before WordPress can load it. Assets are served from `admin/dist/` — WordPress does **not** load from the Vite dev server.
+
+**One-time build:**
 
 ```bash
 cd admin
 npm install
-npm run dev
+npm run build
 ```
 
-Vite will start a dev server (default: `http://localhost:5173`). The WordPress admin page loads assets from this dev server automatically in development mode.
+**Auto-rebuild on file changes (recommended for development):**
 
-> **Note:** For the admin UI to load from Vite's dev server, ensure the plugin is configured to detect the dev server. In production, it loads from `admin/dist/`.
+```bash
+cd admin
+npm run watch
+```
+
+Vite will watch for changes and rebuild `admin/dist/` automatically. Refresh the WP admin page (`http://smp.local/wp-admin/admin.php?page=smooth-search`) to see your changes.
+
+> **Note:** `npm run dev` starts a standalone Vite preview server — it is **not** embedded in WordPress and is only useful for isolated component testing.
 
 ### Step 5 — Rebuild after PHP or JS/CSS changes
 
@@ -128,8 +137,9 @@ This script:
 
 | Command | Description |
 |---|---|
-| `npm run dev` | Start Vite dev server (hot reload) |
-| `npm run build` | Production build → `admin/dist/` |
+| `npm run build` | One-time build → `admin/dist/` |
+| `npm run watch` | Auto-rebuild on file changes (dev) |
+| `npm run dev` | Standalone Vite preview server (not WordPress-embedded) |
 | `npm run preview` | Preview the production build |
 | `npm test` | Run Vitest component tests |
 

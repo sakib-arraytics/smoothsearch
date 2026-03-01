@@ -782,7 +782,7 @@ jobs:
           build_info = f'Plugin Build: {build_summary.get(\"total_size_mb\", 0)} MB | ZIP: {build_summary.get(\"zip_size_mb\", 0)} MB | Status: {build_summary.get(\"status\", \"PASSED\")}'
           blocks.append(callout(
               f'Release v{version} | {datetime.utcnow().strftime(\"%B %d, %Y\")} | {build_info}',
-              'rocket'
+              '🚀'
           ))
           blocks.append(divider())
 
@@ -806,7 +806,7 @@ jobs:
           blog = to_str(ai.get('marketing_blog_draft', ''))
           if blog:
               blocks.append(h('Blog Post Draft', 1))
-              blocks.append(callout('Draft - edit before publishing', 'memo'))
+              blocks.append(callout('Draft - edit before publishing', '✏️'))
               for para in blog.split('\n\n'):
                   if para.strip():
                       blocks.append(text(para.strip()))
@@ -870,7 +870,7 @@ jobs:
 
           payload = {
               'parent': {'database_id': db_id},
-              'icon': {'type': 'emoji', 'emoji': 'rocket'},
+              'icon': {'type': 'emoji', 'emoji': '🚀'},
               'properties': {
                   'Name': {'title': [{'type': 'text', 'text': {'content': f'Release v{version}'}}]},
                   'Version': {'rich_text': [{'type': 'text', 'text': {'content': version}}]},

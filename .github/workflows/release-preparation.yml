@@ -82,130 +82,45 @@ jobs:
           echo "release_type=$RELEASE_TYPE" >> $GITHUB_OUTPUT
           echo "dry_run=$DRY_RUN" >> $GITHUB_OUTPUT
 
-  build-analysis:
-    name: Build Analysis
-    runs-on: ubuntu-latest
-    needs: [prepare]
-    outputs:
-      build_report: ${{ steps.report.outputs.build_report }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "18"
-          cache: "npm"
-
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: "8.2"
-          coverage: none
-          tools: composer
-
-      - name: Install root npm dependencies
-        run: npm ci
-
-      - name: Install admin npm dependencies
-        run: cd admin && npm ci
-
-      - name: Install Composer dependencies
-        run: composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
-
-      - name: Run build
-        run: npm run smooth-build
-
-      - name: Generate build report
-        id: report
-        run: |
-          python3 -c "
-          import json, os
-          from datetime import datetime
-
-          version = '${{ needs.prepare.outputs.version }}'
-          build_size = 0
-          build_files = 0
-          zip_size = 0
-          zip_name = ''
-
-          # Build output is at ../product-build/ relative to workspace
-          product_build = os.path.join(os.getcwd(), '..', 'product-build')
-          build_dir = os.path.join(product_build, 'smooth-search')
-
-          if os.path.exists(build_dir):
-              for dirpath, dirnames, filenames in os.walk(build_dir):
-                  for f in filenames:
-                      fp = os.path.join(dirpath, f)
-                      try:
-                          sz = os.path.getsize(fp)
-                          build_size += sz
-                          build_files += 1
-                      except OSError:
-                          pass
-
-          # Find ZIP
-          if os.path.exists(product_build):
-              for f in os.listdir(product_build):
-                  if f.endswith('.zip') and 'smooth-search' in f:
-                      zip_path = os.path.join(product_build, f)
-                      zip_size = os.path.getsize(zip_path)
-                      zip_name = f
-
-          # Gather asset info
-          assets_dir = os.path.join(build_dir, 'assets')
-          asset_files = []
-          if os.path.exists(assets_dir):
-              for dirpath, dirnames, filenames in os.walk(assets_dir):
-                  for f in filenames:
-                      fp = os.path.join(dirpath, f)
-                      rel = os.path.relpath(fp, build_dir)
-                      sz = os.path.getsize(fp)
-                      asset_files.append({'file': rel, 'size_kb': round(sz/1024, 2)})
-          asset_files.sort(key=lambda x: x['size_kb'], reverse=True)
-
-          report = {
-              'repo': 'smooth-search',
-              'version': version,
-              'generated_at': datetime.utcnow().isoformat(),
-              'build_size': {
-                  'total_bytes': build_size,
-                  'total_kb': round(build_size/1024, 2),
-                  'total_mb': round(build_size/(1024*1024), 2),
-                  'file_count': build_files
-              },
-              'zip': {
-                  'name': zip_name,
-                  'size_kb': round(zip_size/1024, 2),
-                  'size_mb': round(zip_size/(1024*1024), 2)
-              },
-              'top_assets': asset_files[:10],
-              'summary': {
-                  'total_size_mb': round(build_size/(1024*1024), 2),
-                  'zip_size_mb': round(zip_size/(1024*1024), 2),
-                  'build_passed': build_files > 0,
-                  'status': 'PASSED' if build_files > 0 else 'EMPTY'
-              }
-          }
-
-          with open('build-report.json', 'w') as f:
-              json.dump(report, f, indent=2)
-
-          print('Build report generated')
-          print(f'Plugin files: {build_files}')
-          print(f'Build size: {round(build_size/(1024*1024), 2)} MB')
-          print(f'ZIP: {zip_name} ({round(zip_size/1024, 2)} KB)')
-          "
-          echo "build_report=$(cat build-report.json | python3 -c 'import sys,json; print(json.dumps(json.load(sys.stdin)))')" >> $GITHUB_OUTPUT
-
-      - name: Upload build report
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-analysis-report
-          path: build-report.json
-          retention-days: 30
+  # build-analysis:  # TODO: re-enable once build environment is configured
+  #   name: Build Analysis
+  #   runs-on: ubuntu-latest
+  #   needs: [prepare]
+  #   outputs:
+  #     build_report: ${{ steps.report.outputs.build_report }}
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         fetch-depth: 0
+  #     - name: Setup Node.js
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: "18"
+  #         cache: "npm"
+  #     - name: Setup PHP
+  #       uses: shivammathur/setup-php@v2
+  #       with:
+  #         php-version: "8.2"
+  #         coverage: none
+  #         tools: composer
+  #     - name: Install root npm dependencies
+  #       run: npm ci
+  #     - name: Install admin npm dependencies
+  #       run: cd admin && npm ci
+  #     - name: Install Composer dependencies
+  #       run: composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
+  #     - name: Run build
+  #       run: npm run smooth-build
+  #     - name: Generate build report
+  #       id: report
+  #       run: |
+  #         # ... build report generation script ...
+  #     - name: Upload build report
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: build-analysis-report
+  #         path: build-report.json
+  #         retention-days: 30
 
   collect-prs:
     name: Collect Merged PRs
@@ -453,7 +368,7 @@ jobs:
   ai-generation:
     name: AI Content Generation
     runs-on: ubuntu-latest
-    needs: [prepare, build-analysis, collect-prs, collect-feedback]
+    needs: [prepare, collect-prs, collect-feedback]
     env:
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
     steps:
@@ -517,12 +432,12 @@ jobs:
 
           with open('pr-data.json') as f:
               pr_data = json.load(f)
-          with open('build-report.json') as f:
-              build_report = json.load(f)
+
+          # build-analysis is temporarily disabled; use a stub
+          build = {'total_size_mb': 0, 'zip_size_mb': 0, 'status': 'skipped'}
 
           prs = pr_data.get('prs', [])
           commits = pr_data.get('recent_commits', [])
-          build = build_report.get('summary', {})
 
           prompt = f'''You are the release manager for a WordPress plugin called Smooth Search.
 
@@ -788,13 +703,13 @@ jobs:
 
           with open('feedback-intelligence.json') as f:
               fb = json.load(f)
-          with open('build-report.json') as f:
-              build = json.load(f)
+
+          # build-analysis is temporarily disabled; use a stub
+          build_summary = {'total_size_mb': 0, 'zip_size_mb': 0, 'status': 'skipped'}
 
           version = ai.get('version', '?.?.?')
           entries = ai.get('changelog_entries', [])
           diff = fb.get('diff_report', {})
-          build_summary = build.get('summary', {})
 
           def to_str(val):
               if isinstance(val, dict):

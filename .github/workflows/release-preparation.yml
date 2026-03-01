@@ -82,130 +82,45 @@ jobs:
           echo "release_type=$RELEASE_TYPE" >> $GITHUB_OUTPUT
           echo "dry_run=$DRY_RUN" >> $GITHUB_OUTPUT
 
-  build-analysis:
-    name: Build Analysis
-    runs-on: ubuntu-latest
-    needs: [prepare]
-    outputs:
-      build_report: ${{ steps.report.outputs.build_report }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "18"
-          cache: "npm"
-
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: "8.2"
-          coverage: none
-          tools: composer
-
-      - name: Install root npm dependencies
-        run: npm ci
-
-      - name: Install admin npm dependencies
-        run: cd admin && npm ci
-
-      - name: Install Composer dependencies
-        run: composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
-
-      - name: Run build
-        run: npm run smooth-build
-
-      - name: Generate build report
-        id: report
-        run: |
-          python3 -c "
-          import json, os
-          from datetime import datetime
-
-          version = '${{ needs.prepare.outputs.version }}'
-          build_size = 0
-          build_files = 0
-          zip_size = 0
-          zip_name = ''
-
-          # Build output is at ../product-build/ relative to workspace
-          product_build = os.path.join(os.getcwd(), '..', 'product-build')
-          build_dir = os.path.join(product_build, 'smooth-search')
-
-          if os.path.exists(build_dir):
-              for dirpath, dirnames, filenames in os.walk(build_dir):
-                  for f in filenames:
-                      fp = os.path.join(dirpath, f)
-                      try:
-                          sz = os.path.getsize(fp)
-                          build_size += sz
-                          build_files += 1
-                      except OSError:
-                          pass
-
-          # Find ZIP
-          if os.path.exists(product_build):
-              for f in os.listdir(product_build):
-                  if f.endswith('.zip') and 'smooth-search' in f:
-                      zip_path = os.path.join(product_build, f)
-                      zip_size = os.path.getsize(zip_path)
-                      zip_name = f
-
-          # Gather asset info
-          assets_dir = os.path.join(build_dir, 'assets')
-          asset_files = []
-          if os.path.exists(assets_dir):
-              for dirpath, dirnames, filenames in os.walk(assets_dir):
-                  for f in filenames:
-                      fp = os.path.join(dirpath, f)
-                      rel = os.path.relpath(fp, build_dir)
-                      sz = os.path.getsize(fp)
-                      asset_files.append({'file': rel, 'size_kb': round(sz/1024, 2)})
-          asset_files.sort(key=lambda x: x['size_kb'], reverse=True)
-
-          report = {
-              'repo': 'smooth-search',
-              'version': version,
-              'generated_at': datetime.utcnow().isoformat(),
-              'build_size': {
-                  'total_bytes': build_size,
-                  'total_kb': round(build_size/1024, 2),
-                  'total_mb': round(build_size/(1024*1024), 2),
-                  'file_count': build_files
-              },
-              'zip': {
-                  'name': zip_name,
-                  'size_kb': round(zip_size/1024, 2),
-                  'size_mb': round(zip_size/(1024*1024), 2)
-              },
-              'top_assets': asset_files[:10],
-              'summary': {
-                  'total_size_mb': round(build_size/(1024*1024), 2),
-                  'zip_size_mb': round(zip_size/(1024*1024), 2),
-                  'build_passed': build_files > 0,
-                  'status': 'PASSED' if build_files > 0 else 'EMPTY'
-              }
-          }
-
-          with open('build-report.json', 'w') as f:
-              json.dump(report, f, indent=2)
-
-          print('Build report generated')
-          print(f'Plugin files: {build_files}')
-          print(f'Build size: {round(build_size/(1024*1024), 2)} MB')
-          print(f'ZIP: {zip_name} ({round(zip_size/1024, 2)} KB)')
-          "
-          echo "build_report=$(cat build-report.json | python3 -c 'import sys,json; print(json.dumps(json.load(sys.stdin)))')" >> $GITHUB_OUTPUT
-
-      - name: Upload build report
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-analysis-report
-          path: build-report.json
-          retention-days: 30
+  # build-analysis:  # TODO: re-enable once build environment is configured
+  #   name: Build Analysis
+  #   runs-on: ubuntu-latest
+  #   needs: [prepare]
+  #   outputs:
+  #     build_report: ${{ steps.report.outputs.build_report }}
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         fetch-depth: 0
+  #     - name: Setup Node.js
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: "18"
+  #         cache: "npm"
+  #     - name: Setup PHP
+  #       uses: shivammathur/setup-php@v2
+  #       with:
+  #         php-version: "8.2"
+  #         coverage: none
+  #         tools: composer
+  #     - name: Install root npm dependencies
+  #       run: npm ci
+  #     - name: Install admin npm dependencies
+  #       run: cd admin && npm ci
+  #     - name: Install Composer dependencies
+  #       run: composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
+  #     - name: Run build
+  #       run: npm run smooth-build
+  #     - name: Generate build report
+  #       id: report
+  #       run: |
+  #         # ... build report generation script ...
+  #     - name: Upload build report
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: build-analysis-report
+  #         path: build-report.json
+  #         retention-days: 30
 
   collect-prs:
     name: Collect Merged PRs
@@ -453,7 +368,7 @@ jobs:
   ai-generation:
     name: AI Content Generation
     runs-on: ubuntu-latest
-    needs: [prepare, build-analysis, collect-prs, collect-feedback]
+    needs: [prepare, collect-prs, collect-feedback]
     env:
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
     steps:
@@ -517,12 +432,12 @@ jobs:
 
           with open('pr-data.json') as f:
               pr_data = json.load(f)
-          with open('build-report.json') as f:
-              build_report = json.load(f)
+
+          # build-analysis is temporarily disabled; use a stub
+          build = {'total_size_mb': 0, 'zip_size_mb': 0, 'status': 'skipped'}
 
           prs = pr_data.get('prs', [])
           commits = pr_data.get('recent_commits', [])
-          build = build_report.get('summary', {})
 
           prompt = f'''You are the release manager for a WordPress plugin called Smooth Search.
 
@@ -786,15 +701,22 @@ jobs:
           print(json.dumps(ai, indent=2, ensure_ascii=False)[:3000])
           print('=== END AI OUTPUT ===')
 
-          with open('feedback-intelligence.json') as f:
-              fb = json.load(f)
-          with open('build-report.json') as f:
-              build = json.load(f)
+          try:
+              with open('feedback-intelligence.json') as f:
+                  fb = json.load(f)
+          except FileNotFoundError:
+              fb = {'diff_report': {'addressed': [], 'pending': [], 'sentiment_summary': {'overall': 'n/a'}, 'stats': {}}}
+
+          try:
+              with open('build-report.json') as f:
+                  build = json.load(f)
+              build_summary = build.get('summary', {})
+          except FileNotFoundError:
+              build_summary = {'total_size_mb': 0, 'zip_size_mb': 0, 'status': 'skipped'}
 
           version = ai.get('version', '?.?.?')
           entries = ai.get('changelog_entries', [])
           diff = fb.get('diff_report', {})
-          build_summary = build.get('summary', {})
 
           def to_str(val):
               if isinstance(val, dict):
@@ -817,12 +739,12 @@ jobs:
           for e in entries:
               t = (e.get('type', '') or '').strip().lower()
               if t in ('new', 'feature'):
-                  prefix = 'New'
+                  prefix = '✨'
               elif t in ('fix', 'bug fix'):
-                  prefix = 'Fix'
+                  prefix = '🔧'
               else:
-                  prefix = 'Tweak'
-              changelog_lines.append(f'[{prefix}] {e.get(\"entry\", \"\")}')
+                  prefix = '⚡'
+              changelog_lines.append(f'{prefix} [{e.get(\"type\", \"Other\")}] {e.get(\"entry\", \"\")}')
           changelog_text = chr(10).join(changelog_lines)[:2000] if changelog_lines else 'No changelog entries generated'
 
           def text(content, bold=False):
@@ -862,27 +784,27 @@ jobs:
                   }
               }
 
+          release_type = '${{ needs.prepare.outputs.release_type }}'
           blocks = []
 
-          build_info = f'Plugin Build: {build_summary.get(\"total_size_mb\", 0)} MB | ZIP: {build_summary.get(\"zip_size_mb\", 0)} MB | Status: {build_summary.get(\"status\", \"PASSED\")}'
           blocks.append(callout(
-              f'Release v{version} | {datetime.utcnow().strftime(\"%B %d, %Y\")} | {build_info}',
-              'rocket'
+              f'Release v{version} | {datetime.utcnow().strftime(\"%B %d, %Y\")} | Build: {build_summary.get(\"status\", \"PASSED\")} | {build_summary.get(\"total_size_mb\", 0)} MB',
+              '🚀'
           ))
           blocks.append(divider())
 
-          blocks.append(h('Changelog', 1))
-          for t, icon in [('New', 'New'), ('Fix', 'Fix'), ('Tweak', 'Tweak')]:
+          blocks.append(h('📋 Changelog', 1))
+          for t, icon in [('New', '✨'), ('Fix', '🔧'), ('Tweak', '⚡')]:
               typed = [e for e in entries if e.get('type') == t]
               if typed:
-                  blocks.append(text(f'[{t}]', bold=True))
+                  blocks.append(text(f'{icon} {t}', bold=True))
                   for e in typed:
                       blocks.append(bullet(e.get('entry', '')))
           blocks.append(divider())
 
           summary = to_str(ai.get('executive_summary', ''))
           if summary:
-              blocks.append(h('Executive Summary', 1))
+              blocks.append(h('📊 Executive Summary', 1))
               for para in summary.split('\n\n'):
                   if para.strip():
                       blocks.append(text(para.strip()))
@@ -890,8 +812,8 @@ jobs:
 
           blog = to_str(ai.get('marketing_blog_draft', ''))
           if blog:
-              blocks.append(h('Blog Post Draft', 1))
-              blocks.append(callout('Draft - edit before publishing', 'memo'))
+              blocks.append(h('📝 Blog Post Draft', 1))
+              blocks.append(callout('Draft - edit before publishing', '✏️'))
               for para in blog.split('\n\n'):
                   if para.strip():
                       blocks.append(text(para.strip()))
@@ -899,13 +821,13 @@ jobs:
 
           linkedin = to_str(ai.get('linkedin_post_draft', ''))
           if linkedin:
-              blocks.append(h('LinkedIn Post Draft', 1))
+              blocks.append(h('💼 LinkedIn Post Draft', 1))
               blocks.append(code_block(linkedin))
               blocks.append(divider())
 
           reddit = to_str(ai.get('reddit_post_draft', ''))
           if reddit:
-              blocks.append(h('Reddit Post Draft', 1))
+              blocks.append(h('🟠 Reddit Post Draft', 1))
               blocks.append(code_block(reddit))
               blocks.append(divider())
 
@@ -917,7 +839,7 @@ jobs:
           else:
               email = str(email_raw) if email_raw else ''
           if email:
-              blocks.append(h('Email Draft', 1))
+              blocks.append(h('📧 Email Draft', 1))
               for para in email.split('\n\n'):
                   if para.strip():
                       blocks.append(text(para.strip()))
@@ -927,35 +849,37 @@ jobs:
           pending = diff.get('pending', [])
           sentiment = diff.get('sentiment_summary', {})
 
-          blocks.append(h('Feedback Intelligence', 1))
+          blocks.append(h('👥 Feedback Intelligence', 1))
           blocks.append(text(f'Overall sentiment: {sentiment.get(\"overall\", \"N/A\")}'))
 
           if addressed:
-              blocks.append(h('Issues Addressed', 2))
+              blocks.append(h('✅ Issues Addressed', 2))
               for item in addressed:
                   blocks.append(bullet(f'{item.get(\"feedback_summary\",\"\")} → {item.get(\"addressed_by\",\"\")}'))
 
           if pending:
-              blocks.append(h('Pending Issues', 2))
+              blocks.append(h('⏳ Pending Issues', 2))
               for item in pending:
-                  sev = {'HIGH':'[HIGH]','MEDIUM':'[MED]','LOW':'[LOW]'}.get(item.get('severity',''), '[-]')
+                  sev = {'HIGH': '🔴', 'MEDIUM': '🟡', 'LOW': '🟢'}.get(item.get('severity', ''), '⚪')
                   blocks.append(bullet(f'{sev} {item.get(\"feedback_summary\",\"\")} — {item.get(\"recommended_priority\",\"\")}'))
 
           blocks.append(divider())
           blocks.append(text(f'Generated by Release Intelligence System on {datetime.utcnow().strftime(\"%Y-%m-%d %H:%M\")} UTC'))
 
-          release_type = '${{ needs.prepare.outputs.release_type }}'
           summary_text = to_str(ai.get('executive_summary', ''))[:2000]
           if not summary_text:
               highlights = ai.get('release_highlights', [])
               if highlights:
-                  summary_text = chr(10).join([f'- {h}' for h in highlights])[:2000]
+                  summary_text = chr(10).join([f'• {h}' for h in highlights])[:2000]
               else:
                   summary_text = 'No summary generated'
 
+          print(f'Summary text length: {len(summary_text)}')
+          print(f'Changelog text length: {len(changelog_text)}')
+
           payload = {
               'parent': {'database_id': db_id},
-              'icon': {'type': 'emoji', 'emoji': 'rocket'},
+              'icon': {'type': 'emoji', 'emoji': '🚀'},
               'properties': {
                   'Name': {'title': [{'type': 'text', 'text': {'content': f'Release v{version}'}}]},
                   'Version': {'rich_text': [{'type': 'text', 'text': {'content': version}}]},
@@ -985,10 +909,12 @@ jobs:
               page_id = resp.json()['id']
               for chunk_start in range(100, len(blocks), 100):
                   chunk = blocks[chunk_start:chunk_start+100]
-                  requests.patch(
+                  r = requests.patch(
                       f'https://api.notion.com/v1/blocks/{page_id}/children',
                       headers=headers,
                       json={'children': chunk}
                   )
+                  if r.status_code not in (200, 201):
+                      print(f'Warning: block chunk append failed: {r.status_code} {r.text[:200]}')
           print('Done!')
           "

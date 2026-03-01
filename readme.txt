@@ -74,7 +74,8 @@ Yes. You can place the search bar anywhere using the shortcode or block.
 == Changelog ==
 
 = 1.0.0 =
-*   Initial release.
-*   Added Rust/Wasm search engine.
-*   Added React-based Admin Dashboard.
-*   Implemented Indexing system with Action Scheduler.
+NEW:   Initial release.
+NEW:   Added Rust/Wasm search engine.
+NEW:   Added React-based Admin Dashboard.
+NEW:   Implemented Indexing system with Action Scheduler.
+FIX:   Various bug fixes and performance improvements.

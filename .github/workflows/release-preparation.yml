@@ -744,7 +744,7 @@ jobs:
                   prefix = '🔧'
               else:
                   prefix = '⚡'
-              changelog_lines.append(f'{prefix} [{e.get("type", "Other")}] {e.get("entry", "")}')
+              changelog_lines.append(f'{prefix} [{e.get(\"type\", \"Other\")}] {e.get(\"entry\", \"\")}')
           changelog_text = chr(10).join(changelog_lines)[:2000] if changelog_lines else 'No changelog entries generated'
 
           def text(content, bold=False):
@@ -788,7 +788,7 @@ jobs:
           blocks = []
 
           blocks.append(callout(
-              f'Release v{version} | {datetime.utcnow().strftime("%B %d, %Y")} | Build: {build_summary.get("status", "PASSED")} | {build_summary.get("total_size_mb", 0)} MB',
+              f'Release v{version} | {datetime.utcnow().strftime(\"%B %d, %Y\")} | Build: {build_summary.get(\"status\", \"PASSED\")} | {build_summary.get(\"total_size_mb\", 0)} MB',
               '🚀'
           ))
           blocks.append(divider())
@@ -886,7 +886,7 @@ jobs:
                   'Release Type': {'select': {'name': release_type}},
                   'Status': {'select': {'name': 'Draft'}},
                   'Date': {'date': {'start': datetime.utcnow().strftime('%Y-%m-%d')}},
-                  'Build Size': {'rich_text': [{'type': 'text', 'text': {'content': f'{build_summary.get("total_size_mb", 0)} MB'}}]},
+                  'Build Size': {'rich_text': [{'type': 'text', 'text': {'content': f'{build_summary.get(\"total_size_mb\", 0)} MB'}}]},
                   'New Features': {'number': new_count},
                   'Bug Fixes': {'number': fix_count},
                   'Tweaks': {'number': tweak_count},

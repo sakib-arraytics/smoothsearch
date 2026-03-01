@@ -1,0 +1,994 @@
+# Release Preparation Workflow for Smooth Search WordPress Plugin
+#
+# Triggers:
+#   - Automatically on push/PR to release/** branches
+#   - Manually via GitHub UI or local CLI:
+#
+#   gh workflow run release-preparation.yml \
+#     --field release_version=1.2.0 \
+#     --field release_type=minor \
+#     --field dry_run=false
+#
+# Required Secrets:
+#   - OPENROUTER_API_KEY  (free tier: https://openrouter.ai)
+#   - NOTION_API_KEY
+#   - NOTION_DATABASE_ID
+
+name: Release Preparation
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Release version (e.g. 1.0.0)"
+        required: false
+        type: string
+      release_type:
+        description: "Release type"
+        required: false
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: patch
+      dry_run:
+        description: "Dry run - skip Notion publishing"
+        required: false
+        type: boolean
+        default: false
+  push:
+    branches:
+      - 'release/**'
+  pull_request:
+    branches:
+      - 'release/**'
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: read
+
+env:
+  REPO_NAME: smooth-search
+
+jobs:
+  prepare:
+    name: Prepare Release Info
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      release_type: ${{ steps.resolve.outputs.release_type }}
+      dry_run: ${{ steps.resolve.outputs.dry_run }}
+    steps:
+      - name: Resolve version and parameters
+        id: resolve
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.release_version }}" ]; then
+            VERSION="${{ github.event.inputs.release_version }}"
+            RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+            DRY_RUN="${{ github.event.inputs.dry_run }}"
+          else
+            # Extract from branch name: refs/heads/release/1.2.3 or release/1.2.3
+            BRANCH="${{ github.head_ref || github.ref_name }}"
+            VERSION=$(echo "$BRANCH" | sed 's|release/||')
+            RELEASE_TYPE="patch"
+            DRY_RUN="false"
+          fi
+          echo "Resolved version: $VERSION"
+          echo "Release type: $RELEASE_TYPE"
+          echo "Dry run: $DRY_RUN"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "release_type=$RELEASE_TYPE" >> $GITHUB_OUTPUT
+          echo "dry_run=$DRY_RUN" >> $GITHUB_OUTPUT
+
+  build-analysis:
+    name: Build Analysis
+    runs-on: ubuntu-latest
+    needs: [prepare]
+    outputs:
+      build_report: ${{ steps.report.outputs.build_report }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          coverage: none
+          tools: composer
+
+      - name: Install root npm dependencies
+        run: npm ci
+
+      - name: Install admin npm dependencies
+        run: cd admin && npm ci
+
+      - name: Install Composer dependencies
+        run: composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
+
+      - name: Run build
+        run: npm run smooth-build
+
+      - name: Generate build report
+        id: report
+        run: |
+          python3 -c "
+          import json, os
+          from datetime import datetime
+
+          version = '${{ needs.prepare.outputs.version }}'
+          build_size = 0
+          build_files = 0
+          zip_size = 0
+          zip_name = ''
+
+          # Build output is at ../product-build/ relative to workspace
+          product_build = os.path.join(os.getcwd(), '..', 'product-build')
+          build_dir = os.path.join(product_build, 'smooth-search')
+
+          if os.path.exists(build_dir):
+              for dirpath, dirnames, filenames in os.walk(build_dir):
+                  for f in filenames:
+                      fp = os.path.join(dirpath, f)
+                      try:
+                          sz = os.path.getsize(fp)
+                          build_size += sz
+                          build_files += 1
+                      except OSError:
+                          pass
+
+          # Find ZIP
+          if os.path.exists(product_build):
+              for f in os.listdir(product_build):
+                  if f.endswith('.zip') and 'smooth-search' in f:
+                      zip_path = os.path.join(product_build, f)
+                      zip_size = os.path.getsize(zip_path)
+                      zip_name = f
+
+          # Gather asset info
+          assets_dir = os.path.join(build_dir, 'assets')
+          asset_files = []
+          if os.path.exists(assets_dir):
+              for dirpath, dirnames, filenames in os.walk(assets_dir):
+                  for f in filenames:
+                      fp = os.path.join(dirpath, f)
+                      rel = os.path.relpath(fp, build_dir)
+                      sz = os.path.getsize(fp)
+                      asset_files.append({'file': rel, 'size_kb': round(sz/1024, 2)})
+          asset_files.sort(key=lambda x: x['size_kb'], reverse=True)
+
+          report = {
+              'repo': 'smooth-search',
+              'version': version,
+              'generated_at': datetime.utcnow().isoformat(),
+              'build_size': {
+                  'total_bytes': build_size,
+                  'total_kb': round(build_size/1024, 2),
+                  'total_mb': round(build_size/(1024*1024), 2),
+                  'file_count': build_files
+              },
+              'zip': {
+                  'name': zip_name,
+                  'size_kb': round(zip_size/1024, 2),
+                  'size_mb': round(zip_size/(1024*1024), 2)
+              },
+              'top_assets': asset_files[:10],
+              'summary': {
+                  'total_size_mb': round(build_size/(1024*1024), 2),
+                  'zip_size_mb': round(zip_size/(1024*1024), 2),
+                  'build_passed': build_files > 0,
+                  'status': 'PASSED' if build_files > 0 else 'EMPTY'
+              }
+          }
+
+          with open('build-report.json', 'w') as f:
+              json.dump(report, f, indent=2)
+
+          print('Build report generated')
+          print(f'Plugin files: {build_files}')
+          print(f'Build size: {round(build_size/(1024*1024), 2)} MB')
+          print(f'ZIP: {zip_name} ({round(zip_size/1024, 2)} KB)')
+          "
+          echo "build_report=$(cat build-report.json | python3 -c 'import sys,json; print(json.dumps(json.load(sys.stdin)))')" >> $GITHUB_OUTPUT
+
+      - name: Upload build report
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-analysis-report
+          path: build-report.json
+          retention-days: 30
+
+  collect-prs:
+    name: Collect Merged PRs
+    runs-on: ubuntu-latest
+    needs: [prepare]
+    outputs:
+      pr_data: ${{ steps.collect.outputs.pr_data }}
+      last_tag: ${{ steps.collect.outputs.last_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Collect PRs and commits since last release
+        id: collect
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 -c "
+          import subprocess, json, os
+          from datetime import datetime, timedelta, timezone
+
+          repo = '${{ github.repository }}'
+          print(f'Repository: {repo}')
+
+          gh_ver = subprocess.run(['gh', '--version'], capture_output=True, text=True)
+          print(f'gh CLI: {gh_ver.stdout.strip().split(chr(10))[0]}')
+
+          last_tag = 'none'
+          last_tag_date = None
+
+          try:
+              result = subprocess.run(
+                  ['gh', 'api', f'repos/{repo}/releases/latest'],
+                  capture_output=True, text=True, env={**os.environ}
+              )
+              if result.returncode == 0:
+                  data = json.loads(result.stdout)
+                  last_tag = data.get('tag_name', 'none')
+                  last_tag_date = data.get('published_at', '')
+                  print(f'Found latest release: {last_tag} at {last_tag_date}')
+              else:
+                  print(f'No releases found (API returned {result.returncode})')
+          except Exception as e:
+              print(f'Error getting releases: {e}')
+
+          if not last_tag_date:
+              last_tag_date = (datetime.now(timezone.utc) - timedelta(days=30)).strftime('%Y-%m-%dT%H:%M:%SZ')
+              last_tag = 'none (using last 30 days)'
+
+          print(f'Last tag: {last_tag}')
+          print(f'Since: {last_tag_date}')
+
+          cutoff = last_tag_date[:19]
+          print(f'Cutoff for filtering: {cutoff}')
+
+          prs = []
+          print('--- Trying: gh pr list --state merged ---')
+          prs_result = subprocess.run(
+              ['gh', 'pr', 'list',
+               '--repo', repo,
+               '--state', 'merged',
+               '--limit', '50',
+               '--json', 'number,title,body,labels,mergedAt,author,url'],
+              capture_output=True, text=True, env={**os.environ}
+          )
+          print(f'gh pr list exit code: {prs_result.returncode}')
+          if prs_result.stdout:
+              prs = json.loads(prs_result.stdout)
+              print(f'gh pr list returned {len(prs)} merged PRs')
+
+          if not prs:
+              print('--- Fallback: gh pr list --state closed ---')
+              closed_result = subprocess.run(
+                  ['gh', 'pr', 'list',
+                   '--repo', repo,
+                   '--state', 'closed',
+                   '--limit', '50',
+                   '--json', 'number,title,body,labels,mergedAt,closedAt,author,url'],
+                  capture_output=True, text=True, env={**os.environ}
+              )
+              if closed_result.stdout:
+                  closed_prs = json.loads(closed_result.stdout)
+                  prs = [p for p in closed_prs if p.get('mergedAt')]
+                  print(f'Of closed PRs, {len(prs)} were actually merged')
+
+          for pr in prs[:5]:
+              print(f'  PR #{pr.get(\"number\")}: {pr.get(\"title\")} (merged: {pr.get(\"mergedAt\", \"N/A\")})')
+
+          filtered_prs = []
+          for pr in prs:
+              merged = (pr.get('mergedAt') or '')[:19]
+              if merged and merged >= cutoff:
+                  title = pr.get('title', '').lower()
+                  if any(w in title for w in ['fix','bug','resolve','patch','hotfix']):
+                      pr_type = 'Fix'
+                  elif any(w in title for w in ['add','new','feat','feature','implement','create']):
+                      pr_type = 'New'
+                  else:
+                      pr_type = 'Tweak'
+                  filtered_prs.append({
+                      'number': pr['number'],
+                      'title': pr['title'],
+                      'body': (pr.get('body') or '')[:500],
+                      'type': pr_type,
+                      'merged_at': pr.get('mergedAt'),
+                      'author': (pr.get('author') or {}).get('login', 'unknown'),
+                      'url': pr.get('url', ''),
+                      'labels': [l.get('name') for l in pr.get('labels', [])]
+                  })
+
+          print(f'After date filtering: {len(filtered_prs)} PRs remain')
+
+          commits = []
+          if not filtered_prs:
+              print('No PRs found, falling back to commits...')
+              commits_result = subprocess.run(
+                  ['gh', 'api', f'repos/{repo}/commits',
+                   '--jq', '.[].commit | {message: .message, date: .committer.date}'],
+                  capture_output=True, text=True, env={**os.environ}
+              )
+              for line in commits_result.stdout.strip().split(chr(10)):
+                  try:
+                      c = json.loads(line)
+                      if c.get('date', '')[:19] >= cutoff:
+                          commits.append(c)
+                  except:
+                      pass
+              print(f'Commits found: {len(commits)}')
+
+          output = {
+              'repo': repo,
+              'target_version': '${{ needs.prepare.outputs.version }}',
+              'last_tag': last_tag,
+              'last_tag_date': last_tag_date,
+              'collected_at': datetime.utcnow().isoformat(),
+              'pr_count': len(filtered_prs),
+              'prs': filtered_prs,
+              'recent_commits': commits[:20],
+              'summary': {
+                  'new_count': sum(1 for p in filtered_prs if p['type'] == 'New'),
+                  'fix_count': sum(1 for p in filtered_prs if p['type'] == 'Fix'),
+                  'tweak_count': sum(1 for p in filtered_prs if p['type'] == 'Tweak'),
+              }
+          }
+
+          with open('pr-data.json', 'w') as f:
+              json.dump(output, f, indent=2)
+
+          print(f'=== FINAL: PRs collected: {len(filtered_prs)}, Commits: {len(commits)} ===')
+          for p in filtered_prs:
+              print(f'  [{p[\"type\"]}] #{p[\"number\"]} {p[\"title\"]}')
+          "
+          echo "pr_data=$(cat pr-data.json | python3 -c 'import sys,json; print(json.dumps(json.load(sys.stdin)))')" >> $GITHUB_OUTPUT
+          echo "last_tag=$(cat pr-data.json | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"last_tag\"])')" >> $GITHUB_OUTPUT
+
+      - name: Upload PR data
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-data
+          path: pr-data.json
+          retention-days: 5
+
+  collect-feedback:
+    name: Collect GitHub Issues Feedback
+    runs-on: ubuntu-latest
+    needs: [prepare]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Collect issues and discussions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 -c "
+          import subprocess, json
+          from datetime import datetime, timedelta, timezone
+
+          repo = '${{ github.repository }}'
+
+          cutoff = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
+
+          try:
+              result = subprocess.run(
+                  ['gh', 'api', f'repos/{repo}/releases/latest'],
+                  capture_output=True, text=True, env={**__import__('os').environ}
+              )
+              if result.returncode == 0:
+                  data = json.loads(result.stdout)
+                  if data.get('published_at'):
+                      cutoff = data['published_at']
+          except:
+              pass
+
+          print(f'Collecting feedback since: {cutoff[:10]}')
+
+          issues_result = subprocess.run(
+              ['gh', 'issue', 'list',
+               '--repo', repo,
+               '--state', 'all',
+               '--limit', '50',
+               '--json', 'number,title,body,state,labels,createdAt,author,url,comments'],
+              capture_output=True, text=True, env={**__import__('os').environ}
+          )
+
+          issues = json.loads(issues_result.stdout or '[]')
+          filtered = [i for i in issues if i.get('createdAt', '') >= cutoff[:10]]
+
+          feedback_items = []
+          for issue in filtered:
+              feedback_items.append({
+                  'source': 'github_issue',
+                  'title': issue.get('title', ''),
+                  'content': (issue.get('body') or '')[:500],
+                  'state': issue.get('state'),
+                  'url': issue.get('url'),
+                  'date': issue.get('createdAt'),
+                  'labels': [l.get('name') for l in issue.get('labels', [])],
+                  'comment_count': issue.get('comments', 0),
+                  'raw_type': 'issue'
+              })
+
+          output = {
+              'source': 'github_issues',
+              'repo': repo,
+              'crawled_at': datetime.utcnow().isoformat(),
+              'cutoff_date': cutoff[:10],
+              'total_items': len(feedback_items),
+              'items': feedback_items
+          }
+
+          with open('feedback-raw.json', 'w') as f:
+              json.dump(output, f, indent=2)
+
+          print(f'Feedback items collected: {len(feedback_items)}')
+          "
+
+      - name: Upload feedback
+        uses: actions/upload-artifact@v4
+        with:
+          name: feedback-raw
+          path: feedback-raw.json
+          retention-days: 5
+
+  ai-generation:
+    name: AI Content Generation
+    runs-on: ubuntu-latest
+    needs: [prepare, build-analysis, collect-prs, collect-feedback]
+    env:
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Python and install dependencies
+        run: |
+          python3 --version
+          pip3 install requests --quiet --break-system-packages 2>/dev/null || pip3 install requests --quiet
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "*"
+          merge-multiple: true
+
+      - name: Run AI generation
+        run: |
+          python3 -c "
+          import json, re, os, time, requests
+          from datetime import datetime
+
+          OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
+          OPENROUTER_MODEL = 'meta-llama/llama-3.1-8b-instruct:free'
+          OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY', '')
+
+          def call_openrouter(prompt, max_tokens=4096, temperature=0.3):
+              print(f'Calling OpenRouter ({OPENROUTER_MODEL})...')
+              if not OPENROUTER_API_KEY:
+                  print('WARNING: OPENROUTER_API_KEY not set, skipping AI call')
+                  return None
+              for attempt in range(3):
+                  try:
+                      resp = requests.post(
+                          OPENROUTER_URL,
+                          headers={
+                              'Authorization': f'Bearer {OPENROUTER_API_KEY}',
+                              'Content-Type': 'application/json',
+                              'HTTP-Referer': 'https://github.com/${{ github.repository }}',
+                              'X-Title': 'Smooth Search Release Preparation'
+                          },
+                          json={
+                              'model': OPENROUTER_MODEL,
+                              'messages': [{'role': 'user', 'content': prompt}],
+                              'max_tokens': max_tokens,
+                              'temperature': temperature
+                          },
+                          timeout=120
+                      )
+                      if resp.status_code == 200:
+                          result = resp.json()['choices'][0]['message']['content'].strip()
+                          print(f'OpenRouter responded: {len(result)} chars')
+                          return result
+                      else:
+                          print(f'Attempt {attempt+1} failed: HTTP {resp.status_code} - {resp.text[:200]}')
+                  except Exception as e:
+                      print(f'Attempt {attempt+1} error: {e}')
+                  if attempt < 2:
+                      time.sleep(5)
+              return None
+
+          with open('pr-data.json') as f:
+              pr_data = json.load(f)
+          with open('build-report.json') as f:
+              build_report = json.load(f)
+
+          prs = pr_data.get('prs', [])
+          commits = pr_data.get('recent_commits', [])
+          build = build_report.get('summary', {})
+
+          prompt = f'''You are the release manager for a WordPress plugin called Smooth Search.
+
+          ## Release Context
+          Version: ${{ needs.prepare.outputs.version }}
+          Release Type: ${{ needs.prepare.outputs.release_type }}
+          Date: {datetime.utcnow().strftime('%B %d, %Y')}
+          PRs merged: {len(prs)}
+          Recent commits: {len(commits)}
+          Plugin build size: {build.get('total_size_mb', 0)} MB
+          ZIP size: {build.get('zip_size_mb', 0)} MB
+          Build status: {build.get('status', 'PASSED')}
+
+          ## Merged PRs
+          {json.dumps([{\"title\": p[\"title\"], \"type\": p[\"type\"], \"body\": p[\"body\"]} for p in prs], indent=2)}
+
+          ## Recent Commits (if no PRs)
+          {json.dumps([c.get(\"message\", \"\")[:100] for c in commits[:10]], indent=2)}
+
+          Generate a complete release report for this Smooth Search WordPress Plugin release. Return ONLY valid JSON with no explanation, no markdown fences, no backticks. Start your response with {{ and end with }}:
+          {{
+            \"version\": \"${{ needs.prepare.outputs.version }}\",
+            \"changelog_entries\": [
+              {{\"type\": \"New or Fix or Tweak\", \"entry\": \"clear one-line description\"}}
+            ],
+            \"executive_summary\": \"2-3 paragraph internal summary of what changed and why it matters for this WordPress plugin\",
+            \"release_highlights\": [\"highlight 1\", \"highlight 2\", \"highlight 3\"],
+            \"marketing_blog_draft\": \"400-500 word blog post about this Smooth Search plugin release. Professional tone.\",
+            \"linkedin_post_draft\": \"150-200 word LinkedIn post with relevant hashtags like #WordPress #WooCommerce\",
+            \"reddit_post_draft\": \"200-250 word honest Reddit post for r/Wordpress or r/woocommerce\",
+            \"followup_email_draft\": \"Subject: ...\\n\\nEmail body 150-200 words\"
+          }}
+          Only return the JSON. Nothing else.'''
+
+          raw = call_openrouter(prompt, max_tokens=4096, temperature=0.3)
+
+          def build_fallback_from_prs(prs, commits):
+              entries = []
+              for p in prs:
+                  entries.append({'type': p.get('type', 'Tweak'), 'entry': p['title']})
+              if not entries:
+                  for c in commits[:10]:
+                      msg = c.get('message', '').split(chr(10))[0][:100]
+                      if msg:
+                          entries.append({'type': 'Tweak', 'entry': msg})
+              if not entries:
+                  entries.append({'type': 'Tweak', 'entry': 'General improvements and updates'})
+
+              highlights = [p['title'] for p in prs[:3]] or ['General updates']
+              pr_descriptions = chr(10).join([f'- {p[\"title\"]}: {(p.get(\"body\") or \"\")[:100]}' for p in prs])
+              summary = f'Release ${{ needs.prepare.outputs.version }} includes {len(prs)} merged pull requests. ' + chr(10) + pr_descriptions if prs else 'Routine maintenance release with general improvements.'
+
+              return {
+                  'version': '${{ needs.prepare.outputs.version }}',
+                  'changelog_entries': entries,
+                  'executive_summary': summary,
+                  'release_highlights': highlights,
+                  'marketing_blog_draft': f'We are excited to announce Smooth Search version ${{ needs.prepare.outputs.version }}. This release includes {len(entries)} changes.',
+                  'linkedin_post_draft': f'New release of Smooth Search v${{ needs.prepare.outputs.version }} is out! {len(entries)} updates included. #WordPress #WooCommerce #release',
+                  'reddit_post_draft': f'Just released Smooth Search v${{ needs.prepare.outputs.version }} with {len(entries)} changes.',
+                  'followup_email_draft': f'Subject: Smooth Search Release v${{ needs.prepare.outputs.version }}{chr(10)}{chr(10)}Hi team, we have released version ${{ needs.prepare.outputs.version }} with {len(entries)} updates.',
+                  'ai_generated': False
+              }
+
+          if not raw:
+              print('AI unavailable, building output from PR data directly')
+              output = build_fallback_from_prs(prs, commits)
+          else:
+              raw = re.sub(r'^[^{]*', '', raw)
+              raw = re.sub(r'[^}]*$', '', raw)
+              try:
+                  output = json.loads(raw)
+                  output['ai_generated'] = True
+                  print('AI JSON parsed successfully')
+              except:
+                  print('Warning: AI JSON parse failed, building from PR data')
+                  output = build_fallback_from_prs(prs, commits)
+
+              if not output.get('changelog_entries'):
+                  fallback = build_fallback_from_prs(prs, commits)
+                  output['changelog_entries'] = fallback['changelog_entries']
+                  if not output.get('executive_summary'):
+                      output['executive_summary'] = fallback['executive_summary']
+
+          output['version'] = '${{ needs.prepare.outputs.version }}'
+          output['generated_at'] = datetime.utcnow().isoformat()
+          output['pr_count'] = len(prs)
+
+          with open('ai-release-output.json', 'w') as f:
+              json.dump(output, f, indent=2, ensure_ascii=False)
+
+          print('=== AI GENERATION RESULT ===')
+          print(f'AI generated: {output.get(\"ai_generated\", \"unknown\")}')
+          print(f'Changelog entries: {len(output.get(\"changelog_entries\", []))}')
+          for e in output.get('changelog_entries', []):
+              print(f'  [{e.get(\"type\")}] {e.get(\"entry\", \"\")}')
+          print(f'Summary length: {len(output.get(\"executive_summary\", \"\"))}')
+          print('=== END ===')
+          "
+
+      - name: Run feedback intelligence
+        run: |
+          python3 -c "
+          import json, re, os, time, requests
+          from datetime import datetime
+
+          OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
+          OPENROUTER_MODEL = 'meta-llama/llama-3.1-8b-instruct:free'
+          OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY', '')
+
+          def call_openrouter(prompt, max_tokens=2000, temperature=0.2):
+              if not OPENROUTER_API_KEY:
+                  return None
+              for attempt in range(3):
+                  try:
+                      resp = requests.post(
+                          OPENROUTER_URL,
+                          headers={
+                              'Authorization': f'Bearer {OPENROUTER_API_KEY}',
+                              'Content-Type': 'application/json',
+                              'HTTP-Referer': 'https://github.com/${{ github.repository }}',
+                              'X-Title': 'Smooth Search Release Preparation'
+                          },
+                          json={
+                              'model': OPENROUTER_MODEL,
+                              'messages': [{'role': 'user', 'content': prompt}],
+                              'max_tokens': max_tokens,
+                              'temperature': temperature
+                          },
+                          timeout=120
+                      )
+                      if resp.status_code == 200:
+                          return resp.json()['choices'][0]['message']['content'].strip()
+                      print(f'Attempt {attempt+1} HTTP {resp.status_code}')
+                  except Exception as e:
+                      print(f'Attempt {attempt+1} error: {e}')
+                  if attempt < 2:
+                      time.sleep(5)
+              return None
+
+          with open('feedback-raw.json') as f:
+              feedback = json.load(f)
+          with open('ai-release-output.json') as f:
+              release = json.load(f)
+
+          items = feedback.get('items', [])
+          changelog = release.get('changelog_entries', [])
+
+          if not items:
+              output = {
+                  'generated_at': datetime.utcnow().isoformat(),
+                  'feedback_stats': {'total': 0},
+                  'diff_report': {
+                      'addressed': [],
+                      'pending': [],
+                      'sentiment_summary': {'overall': 'no feedback found'},
+                      'stats': {'total_feedback_analyzed': 0}
+                  }
+              }
+          else:
+              prompt = f'''Analyze GitHub issues as user feedback for the Smooth Search WordPress plugin.
+
+          Changelog for this release:
+          {json.dumps(changelog, indent=2)}
+
+          GitHub Issues/Feedback:
+          {json.dumps([{\"title\": i[\"title\"], \"content\": i[\"content\"], \"state\": i[\"state\"]} for i in items[:30]], indent=2)}
+
+          Return ONLY valid JSON with no explanation, no markdown, no backticks. Start with {{ end with }}:
+          {{
+            \"addressed\": [{{\"feedback_summary\": \"...\", \"addressed_by\": \"changelog entry\", \"confidence\": \"HIGH or MEDIUM\"}}],
+            \"pending\": [{{\"feedback_summary\": \"...\", \"severity\": \"HIGH/MEDIUM/LOW\", \"recommended_priority\": \"next release or backlog\"}}],
+            \"sentiment_summary\": {{
+              \"overall\": \"positive/mixed/negative\",
+              \"top_topics\": [\"topic1\", \"topic2\"]
+            }},
+            \"stats\": {{
+              \"total_feedback_analyzed\": {len(items)},
+              \"issues_addressed\": 0,
+              \"issues_pending\": 0
+            }}
+          }}
+          Only return the JSON. Nothing else.'''
+
+              raw = call_openrouter(prompt)
+              if raw:
+                  raw = re.sub(r'^[^{]*', '', raw)
+                  raw = re.sub(r'[^}]*$', '', raw)
+                  try:
+                      diff = json.loads(raw)
+                  except:
+                      diff = {'addressed': [], 'pending': [], 'sentiment_summary': {}, 'stats': {}}
+              else:
+                  diff = {'addressed': [], 'pending': [], 'sentiment_summary': {'overall': 'ai unavailable'}, 'stats': {'total_feedback_analyzed': len(items)}}
+
+              output = {
+                  'generated_at': datetime.utcnow().isoformat(),
+                  'feedback_stats': {'total': len(items)},
+                  'diff_report': diff
+              }
+
+          with open('feedback-intelligence.json', 'w') as f:
+              json.dump(output, f, indent=2)
+
+          print(f'Feedback intelligence complete. Items analyzed: {len(items)}')
+          "
+
+      - name: Upload AI outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-outputs
+          path: |
+            ai-release-output.json
+            feedback-intelligence.json
+          retention-days: 30
+
+  publish-notion:
+    name: Publish to Notion
+    runs-on: ubuntu-latest
+    needs: [prepare, ai-generation]
+    if: ${{ needs.prepare.outputs.dry_run != 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: pip install requests
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "*"
+          merge-multiple: true
+
+      - name: Publish to Notion
+        env:
+          NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+        run: |
+          python3 -c "
+          import json, os, requests
+          from datetime import datetime
+
+          api_key = os.environ['NOTION_API_KEY']
+          db_id = os.environ['NOTION_DATABASE_ID']
+
+          headers = {
+              'Authorization': f'Bearer {api_key}',
+              'Content-Type': 'application/json',
+              'Notion-Version': '2022-06-28'
+          }
+
+          with open('ai-release-output.json') as f:
+              ai = json.load(f)
+
+          print('=== AI RELEASE OUTPUT (full) ===')
+          print(json.dumps(ai, indent=2, ensure_ascii=False)[:3000])
+          print('=== END AI OUTPUT ===')
+
+          with open('feedback-intelligence.json') as f:
+              fb = json.load(f)
+          with open('build-report.json') as f:
+              build = json.load(f)
+
+          version = ai.get('version', '?.?.?')
+          entries = ai.get('changelog_entries', [])
+          diff = fb.get('diff_report', {})
+          build_summary = build.get('summary', {})
+
+          def to_str(val):
+              if isinstance(val, dict):
+                  return ' '.join(str(v) for v in val.values() if v)
+              return str(val) if val else ''
+
+          print(f'Version: {version}')
+          print(f'Changelog entries: {len(entries)}')
+          for e in entries:
+              print(f'  - [{e.get(\"type\")}] {e.get(\"entry\", \"\")}')
+
+          def match_type(entry_type, target):
+              return (entry_type or '').strip().lower() == target.lower()
+
+          new_count = sum(1 for e in entries if match_type(e.get('type'), 'New') or match_type(e.get('type'), 'Feature'))
+          fix_count = sum(1 for e in entries if match_type(e.get('type'), 'Fix') or match_type(e.get('type'), 'Bug Fix'))
+          tweak_count = sum(1 for e in entries if match_type(e.get('type'), 'Tweak') or match_type(e.get('type'), 'Improvement'))
+
+          changelog_lines = []
+          for e in entries:
+              t = (e.get('type', '') or '').strip().lower()
+              if t in ('new', 'feature'):
+                  prefix = 'New'
+              elif t in ('fix', 'bug fix'):
+                  prefix = 'Fix'
+              else:
+                  prefix = 'Tweak'
+              changelog_lines.append(f'[{prefix}] {e.get(\"entry\", \"\")}')
+          changelog_text = chr(10).join(changelog_lines)[:2000] if changelog_lines else 'No changelog entries generated'
+
+          def text(content, bold=False):
+              return {
+                  'object': 'block', 'type': 'paragraph',
+                  'paragraph': {'rich_text': [{'type': 'text', 'text': {'content': str(content)[:2000]}, 'annotations': {'bold': bold}}]}
+              }
+
+          def h(content, level=2):
+              t = f'heading_{level}'
+              return {'object': 'block', 'type': t, t: {'rich_text': [{'type': 'text', 'text': {'content': content}}]}}
+
+          def bullet(content):
+              return {
+                  'object': 'block', 'type': 'bulleted_list_item',
+                  'bulleted_list_item': {'rich_text': [{'type': 'text', 'text': {'content': str(content)[:2000]}}]}
+              }
+
+          def divider():
+              return {'object': 'block', 'type': 'divider', 'divider': {}}
+
+          def callout(content, emoji='📌'):
+              return {
+                  'object': 'block', 'type': 'callout',
+                  'callout': {
+                      'rich_text': [{'type': 'text', 'text': {'content': str(content)[:2000]}}],
+                      'icon': {'type': 'emoji', 'emoji': emoji}
+                  }
+              }
+
+          def code_block(content):
+              return {
+                  'object': 'block', 'type': 'code',
+                  'code': {
+                      'rich_text': [{'type': 'text', 'text': {'content': str(content)[:2000]}}],
+                      'language': 'plain text'
+                  }
+              }
+
+          blocks = []
+
+          build_info = f'Plugin Build: {build_summary.get(\"total_size_mb\", 0)} MB | ZIP: {build_summary.get(\"zip_size_mb\", 0)} MB | Status: {build_summary.get(\"status\", \"PASSED\")}'
+          blocks.append(callout(
+              f'Release v{version} | {datetime.utcnow().strftime(\"%B %d, %Y\")} | {build_info}',
+              'rocket'
+          ))
+          blocks.append(divider())
+
+          blocks.append(h('Changelog', 1))
+          for t, icon in [('New', 'New'), ('Fix', 'Fix'), ('Tweak', 'Tweak')]:
+              typed = [e for e in entries if e.get('type') == t]
+              if typed:
+                  blocks.append(text(f'[{t}]', bold=True))
+                  for e in typed:
+                      blocks.append(bullet(e.get('entry', '')))
+          blocks.append(divider())
+
+          summary = to_str(ai.get('executive_summary', ''))
+          if summary:
+              blocks.append(h('Executive Summary', 1))
+              for para in summary.split('\n\n'):
+                  if para.strip():
+                      blocks.append(text(para.strip()))
+              blocks.append(divider())
+
+          blog = to_str(ai.get('marketing_blog_draft', ''))
+          if blog:
+              blocks.append(h('Blog Post Draft', 1))
+              blocks.append(callout('Draft - edit before publishing', 'memo'))
+              for para in blog.split('\n\n'):
+                  if para.strip():
+                      blocks.append(text(para.strip()))
+              blocks.append(divider())
+
+          linkedin = to_str(ai.get('linkedin_post_draft', ''))
+          if linkedin:
+              blocks.append(h('LinkedIn Post Draft', 1))
+              blocks.append(code_block(linkedin))
+              blocks.append(divider())
+
+          reddit = to_str(ai.get('reddit_post_draft', ''))
+          if reddit:
+              blocks.append(h('Reddit Post Draft', 1))
+              blocks.append(code_block(reddit))
+              blocks.append(divider())
+
+          email_raw = ai.get('followup_email_draft', '')
+          if isinstance(email_raw, dict):
+              subj = email_raw.get('Subject', email_raw.get('subject', ''))
+              body = email_raw.get('body', email_raw.get('Body', ''))
+              email = f'Subject: {subj}\n\n{body}' if subj else body
+          else:
+              email = str(email_raw) if email_raw else ''
+          if email:
+              blocks.append(h('Email Draft', 1))
+              for para in email.split('\n\n'):
+                  if para.strip():
+                      blocks.append(text(para.strip()))
+              blocks.append(divider())
+
+          addressed = diff.get('addressed', [])
+          pending = diff.get('pending', [])
+          sentiment = diff.get('sentiment_summary', {})
+
+          blocks.append(h('Feedback Intelligence', 1))
+          blocks.append(text(f'Overall sentiment: {sentiment.get(\"overall\", \"N/A\")}'))
+
+          if addressed:
+              blocks.append(h('Issues Addressed', 2))
+              for item in addressed:
+                  blocks.append(bullet(f'{item.get(\"feedback_summary\",\"\")} → {item.get(\"addressed_by\",\"\")}'))
+
+          if pending:
+              blocks.append(h('Pending Issues', 2))
+              for item in pending:
+                  sev = {'HIGH':'[HIGH]','MEDIUM':'[MED]','LOW':'[LOW]'}.get(item.get('severity',''), '[-]')
+                  blocks.append(bullet(f'{sev} {item.get(\"feedback_summary\",\"\")} — {item.get(\"recommended_priority\",\"\")}'))
+
+          blocks.append(divider())
+          blocks.append(text(f'Generated by Release Intelligence System on {datetime.utcnow().strftime(\"%Y-%m-%d %H:%M\")} UTC'))
+
+          release_type = '${{ needs.prepare.outputs.release_type }}'
+          summary_text = to_str(ai.get('executive_summary', ''))[:2000]
+          if not summary_text:
+              highlights = ai.get('release_highlights', [])
+              if highlights:
+                  summary_text = chr(10).join([f'- {h}' for h in highlights])[:2000]
+              else:
+                  summary_text = 'No summary generated'
+
+          payload = {
+              'parent': {'database_id': db_id},
+              'icon': {'type': 'emoji', 'emoji': 'rocket'},
+              'properties': {
+                  'Name': {'title': [{'type': 'text', 'text': {'content': f'Release v{version}'}}]},
+                  'Version': {'rich_text': [{'type': 'text', 'text': {'content': version}}]},
+                  'Release Type': {'select': {'name': release_type}},
+                  'Status': {'select': {'name': 'Draft'}},
+                  'Date': {'date': {'start': datetime.utcnow().strftime('%Y-%m-%d')}},
+                  'Build Size': {'rich_text': [{'type': 'text', 'text': {'content': f'{build_summary.get(\"total_size_mb\", 0)} MB'}}]},
+                  'New Features': {'number': new_count},
+                  'Bug Fixes': {'number': fix_count},
+                  'Tweaks': {'number': tweak_count},
+                  'Changelog': {'rich_text': [{'type': 'text', 'text': {'content': changelog_text}}]},
+                  'Summary': {'rich_text': [{'type': 'text', 'text': {'content': summary_text}}]},
+              },
+              'children': blocks[:100]
+          }
+
+          resp = requests.post('https://api.notion.com/v1/pages', headers=headers, json=payload)
+
+          if resp.status_code in (200, 201):
+              page_url = resp.json().get('url', '')
+              print(f'Notion page created: {page_url}')
+          else:
+              print(f'Notion error {resp.status_code}: {resp.text[:300]}')
+              exit(1)
+
+          if len(blocks) > 100:
+              page_id = resp.json()['id']
+              for chunk_start in range(100, len(blocks), 100):
+                  chunk = blocks[chunk_start:chunk_start+100]
+                  requests.patch(
+                      f'https://api.notion.com/v1/blocks/{page_id}/children',
+                      headers=headers,
+                      json={'children': chunk}
+                  )
+          print('Done!')
+          "

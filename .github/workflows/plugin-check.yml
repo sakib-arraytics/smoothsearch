@@ -1,0 +1,137 @@
+name: Plugin Check
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - 'release/**'
+  push:
+    branches:
+      - 'release/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  build:
+    name: Build Plugin
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+          tools: composer
+
+      - name: Build admin UI
+        run: |
+          cd admin
+          npm ci
+          npm run build
+          cd ..
+
+      - name: Install root npm dependencies
+        run: npm ci
+
+      - name: Create build directory
+        run: mkdir -p dist/smooth-search
+
+      - name: Install Composer dependencies (no-dev)
+        run: composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
+
+      - name: Copy plugin files to build directory
+        run: |
+          cp smooth-search.php dist/smooth-search/
+          cp readme.txt dist/smooth-search/
+          cp -r includes dist/smooth-search/
+          cp -r vendor dist/smooth-search/
+          # Copy languages if it exists
+          if [ -d languages ]; then cp -r languages dist/smooth-search/; fi
+          # Copy admin dist (built above)
+          mkdir -p dist/smooth-search/admin
+          cp -r admin/dist dist/smooth-search/admin/
+
+      - name: Copy and minify assets
+        run: |
+          mkdir -p dist/smooth-search/assets/css
+          mkdir -p dist/smooth-search/assets/js
+          mkdir -p dist/smooth-search/assets/wasm
+
+          # Minify CSS
+          if ls assets/css/*.css 1>/dev/null 2>&1; then
+            npx esbuild assets/css/*.css --minify --outdir=dist/smooth-search/assets/css
+          fi
+
+          # Minify JS (skip wasm glue)
+          for js_file in assets/js/search-bar.js assets/js/search-worker.js assets/js/indexeddb-cache.js; do
+            if [ -f "$js_file" ]; then
+              npx esbuild "$js_file" --minify --outdir=dist/smooth-search/assets/js --format=esm
+            fi
+          done
+
+          # Copy wasm assets if they exist
+          if ls assets/wasm/*.wasm 1>/dev/null 2>&1; then
+            cp assets/wasm/*.wasm dist/smooth-search/assets/wasm/
+          fi
+          if ls assets/wasm/*.js 1>/dev/null 2>&1; then
+            npx esbuild assets/wasm/*.js --minify --allow-overwrite --outdir=dist/smooth-search/assets/wasm --format=esm
+          fi
+
+      - name: Verify build output
+        run: |
+          echo "Build contents:"
+          ls -la dist/smooth-search/
+          test -f dist/smooth-search/smooth-search.php || (echo "ERROR: smooth-search.php missing" && exit 1)
+          test -f dist/smooth-search/vendor/autoload.php || (echo "ERROR: vendor/autoload.php missing" && exit 1)
+          echo "Build verification passed"
+
+      - name: Upload built plugin
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-build
+          path: dist/smooth-search/
+          retention-days: 1
+
+  plugin-check:
+    name: WordPress Plugin Check
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download built plugin
+        uses: actions/download-artifact@v4
+        with:
+          name: plugin-build
+          path: dist/smooth-search/
+
+      - name: Run Plugin Check
+        id: plugin-check
+        uses: wordpress/plugin-check-action@v1
+        with:
+          build-dir: 'dist/smooth-search'
+
+      - name: Upload Plugin Check report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-check-report
+          path: |
+            plugin-check-*.txt
+            plugin-check-report.json
+          if-no-files-found: ignore
+          retention-days: 30
